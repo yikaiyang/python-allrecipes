@@ -28,28 +28,34 @@ class AllRecipes(object):
 		soup = BeautifulSoup(html_content, 'html.parser')
 
 		search_data = []
-		articles = soup.findAll("article", {"class": "fixed-recipe-card"})
+		articles = soup.select("div.component.card")
 
 		iterarticles = iter(articles)
-		next(iterarticles)
+
 		for article in iterarticles:
 			data = {}
 			try:
-				data["name"] = article.find("h3", {"class": "fixed-recipe-card__h3"}).get_text().strip(' \t\n\r')
-				data["description"] = article.find("div", {"class": "fixed-recipe-card__description"}).get_text().strip(' \t\n\r')
+				data["name"] = article.find("h3", {"class": "card__title"}).get_text().strip(' \t\n\r')
+				data["description"] = article.find("div", {"class": "card__summary"}).get_text().strip(' \t\n\r')
 				data["url"] = article.find("a", href=re.compile('^https://www.allrecipes.com/recipe/'))['href']
 				try:
-					data["image"] = article.find("a", href=re.compile('^https://www.allrecipes.com/recipe/')).find("img")["data-original-src"]
+					data["image"] = article.find("img", src=re.compile('^https://'))
 				except Exception as e1:
 					pass
+
 				try:
-					data["rating"] = float(article.find("div", {"class": "fixed-recipe-card__ratings"}).find("span")["data-ratingstars"])
+					data["rating"] = article.find("span", class_="review-star-text").get_text()
 				except ValueError:
 					data["rating"] = None
+
+				try:
+					data["ratings-count"] = float(article.find("span", {"class": "ratings-count"}).get_text())
+				except ValueError:
+					data["ratings-count"] = None
 			except Exception as e2:
 				pass
-			if data and "image" in data:  # Do not include if no image -> its probably an add or something you do not want in your result
-				search_data.append(data)
+			#if data and "image" in data:  # Do not include if no image -> its probably an add or something you do not want in your result
+			search_data.append(data)
 
 		return search_data
 
@@ -69,17 +75,21 @@ class AllRecipes(object):
 		soup = BeautifulSoup(html_content, 'html.parser')
 
 		try:
-			rating = float(soup.find("div", {"class": "rating-stars"})["data-ratingstars"])
+			rating = float(soup.find("span", {"class": "recipe-reviews-decimal-avg"}).get_text())
 		except ValueError:
 			rating = None
-		ingredients = soup.findAll("li", {"class": "checkList__line"})
-		steps = soup.findAll("span", {"class": "recipe-directions__list--item"})
-		name = soup.find("h1", {"class": "recipe-summary__h1"}).get_text().replace("®", "")
+		
+		ingredients = soup.find_all("li", class_="ingredients-item")
+		steps = soup.find_all("li", {"class": "instructions-section-item"})
 
-		direction_data = soup.find("div", {"class": "directions--section__steps"})
-		prep_time = direction_data.find("time", {"itemprop": "prepTime"}).get_text()
-		cook_time = direction_data.find("time", {"itemprop": "cookTime"}).get_text()
-		total_time = direction_data.find("time", {"itemprop": "totalTime"}).get_text()
+		name = soup.find("h1", {"class": "headline"}).get_text().replace("®", "")
+
+		recipe_properties = soup.find("section", {"class": "recipe-meta-container"})
+
+		prep_time = recipe_properties.find("div", text="prep:").find_next_sibling('div').get_text()
+		cook_time = recipe_properties.find("div", text="cook:").find_next_sibling('div').get_text()
+		total_time = recipe_properties.find("div", text="total:").find_next_sibling('div').get_text()
+		servings = recipe_properties.find("div", text="Servings:").find_next_sibling('div').get_text()
 
 		data = {
 				"rating": rating,
@@ -88,16 +98,17 @@ class AllRecipes(object):
 				"name": name,
 				"prep_time": prep_time,
 				"cook_time": cook_time,
-				"total_time": total_time
+				"total_time": total_time,
+				"servings": servings
 				}
 
 		for ingredient in ingredients:
-			str_ing = ingredient.find("span", {"class": "recipe-ingred_txt"}).get_text()
-			if str_ing and str_ing != "Add all ingredients to list":
+			str_ing = ingredient.find("span", {"class": "ingredients-item-name"}).get_text()
+			if str_ing and str_ing != "Add all ingredients to shopping list":
 				data["ingredients"].append(str_ing)
 
 		for step in steps:
-			str_step = step.get_text()
+			str_step = step.find("p").get_text()
 			if str_step:
 				data["steps"].append(str_step)
 
